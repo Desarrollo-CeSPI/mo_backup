@@ -58,7 +58,7 @@ store_with #{storage_id} do |server|
       option "password", :string, 'pass'
       option "ip", :string
       option "port", :number, 22
-      option "path", :string, "~"
+      option "path", :string, "backups"
       option "keep", :number, 5
       storage_id "SCP"
     end
@@ -68,7 +68,7 @@ store_with #{storage_id} do |server|
       option "password", :string, 'pass'
       option "ip", :string
       option "port", :number, 22
-      option "path", :string, "~"
+      option "path", :string, "backups"
       option "keep", :number, 5
       storage_id "SFTP"
     end

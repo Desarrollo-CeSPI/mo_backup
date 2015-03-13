@@ -4,7 +4,7 @@ module MoBackup
       klass.actions :create, :remove
       klass.default_action :create
 
-      klass.attribute :name, :kind_of => String, :name_attribute => true
+      klass.attribute :name, :kind_of => String, :name_attribute => true, :regex => /^[\w.]+/i
       klass.attribute :description, :kind_of => String
       klass.attribute :user, :kind_of => String, :default => 'root'
       klass.attribute :backup_directory, :kind_of => String, :default => 'Backup/models'
@@ -45,7 +45,7 @@ module MoBackup
       end
 
       def backup_command(model)
-        "/bin/bash -lc backup perform --trigger #{model}"
+        "/bin/bash -lc \"backup perform --trigger #{model}\""
       end
 
     end

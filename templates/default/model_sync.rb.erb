@@ -1,4 +1,4 @@
-Model.new(:<%= @name %><%= @description.nil? ? "" : ",'#{@description}'" %>) do
+Model.new(:'<%= @name %>','<%= @description %>') do
   <%= @syncers_config %>
 
   <%= @notifiers_config %>

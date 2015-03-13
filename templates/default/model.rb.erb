@@ -1,6 +1,6 @@
-Model.new(:<%= @name %><%= @description.nil? ? "" : ",'#{@description}'" %>) do
+Model.new(:'<%= @name %>','<%= @description %>') do
   <% if @archives.any? %>
-  archive :<%= @name %> do |archive|
+  archive :'<%= @name %>' do |archive|
     <% if @use_sudo %>
     archive.use_sudo
     <% end %>

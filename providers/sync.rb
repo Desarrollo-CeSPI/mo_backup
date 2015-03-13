@@ -66,7 +66,7 @@ def cron_backup(create, name)
   end
   if new_resource.every_hours
     cron "sync #{new_resource.name} every #{new_resource.every_hours} hours" do
-      minute  '*'
+      minute  (1..59).to_a.sample
       hour    "*/#{new_resource.every_hours}"
       day     '*'
       month   '*'
