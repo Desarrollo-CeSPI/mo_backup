@@ -1,0 +1,5 @@
+Model.new(:<%= @name %><%= @description.nil? ? "" : ",'#{@description}'" %>) do
+  <%= @syncers_config %>
+
+  <%= @notifiers_config %>
+end

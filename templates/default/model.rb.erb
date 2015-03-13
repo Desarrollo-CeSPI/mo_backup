@@ -1,0 +1,30 @@
+Model.new(:<%= @name %><%= @description.nil? ? "" : ",'#{@description}'" %>) do
+  <% if @archives.any? %>
+  archive :<%= @name %> do |archive|
+    <% if @use_sudo %>
+    archive.use_sudo
+    <% end %>
+    <% if @root %>
+    archive.root "<%= @root %>"
+    <% end %>
+    <% @archives.each do |path| %>
+    archive.add "<%= path %>"
+    <% end %>
+    <% @archives_exclude.each do |path| %>
+    archive.exclude "<%= path %>"
+    <% end %>
+  end
+  <% end %>
+
+  <% if @compress %>
+  compress_with Gzip
+  <% end %>
+
+  <%= @storages_config %>
+
+  <%= @databases_config %>
+
+  <%= @syncers_config %>
+
+  <%= @notifiers_config %>
+end
