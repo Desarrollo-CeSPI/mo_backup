@@ -34,9 +34,14 @@ end
 
 private
 def create_model_template(name)
-  syncer_options = new_resource.syncers.dup.each do |k,options|
-    options.merge!(:directory => new_resource.directories, :exclude => new_resource.exclude)
+
+  syncer_options = Mash.new
+
+  new_resource.syncers.each do |k,options|
+    syncer_options[k] = Mash.new(options.is_a?(Hash) ? options : options.to_hash)
+    syncer_options[k].merge!(:directory => new_resource.directories, :exclude => new_resource.exclude, :path => ::File.join(options['path'],new_resource.prefix_path))
   end
+
   template "backup sync #{name}" do
     path lazy {::File.join(backup_directory,"#{name}.rb")}
     owner new_resource.user

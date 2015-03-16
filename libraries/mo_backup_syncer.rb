@@ -19,7 +19,10 @@ module MoBackup
       attr_reader :directory
 
       def to_s
-        str_options = options_except("component_id","directory","exclude").map {|k,v| "    server.#{k} = #{v}"}.join "\n"
+        str_options = options_except("component_id","directory","exclude","additional_ssh_options","additional_rsync_options").map {|k,v| "    server.#{k} = #{v}"}.join "\n"
+        %w(additional_ssh_options additional_rsync_options).each do |opt|
+          str_options += "\n     server.#{opt} = [ #{Array(options[opt]).map {|x| "'#{x}'" }.join(",")} ]"
+        end
         str_dirs = Array(options['directory']).map {|path| "      directory.add '#{path}'"}.join "\n"
         str_dirs += "\n" + Array(options['exclude']).map {|path| "      directory.exclude '#{path}'"}.join("\n")
         <<-SCRIPT
@@ -35,7 +38,7 @@ sync_with #{syncer_id} do |server|
     end
 
     class Rsync < Default
-      option "path", :string, "backups"
+      option "path", :string, "sync"
       option "mode", :symbol, "ssh"
       option "host", :string
       option "port", :integer, 22
@@ -46,8 +49,8 @@ sync_with #{syncer_id} do |server|
       option "rsync_user", :string, 'backup'
       option "rsync_password", :string
       option "ssh_user", :string, 'backup'
-      option "additional_ssh_options", :string
-      option "additional_rsync_options", :string
+      option "additional_ssh_options", :array, []
+      option "additional_rsync_options", :array, ["-R"]
       syncer_id "RSync::Push"
     end
 

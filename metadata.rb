@@ -4,6 +4,6 @@ maintainer_email 'YOUR_EMAIL'
 license          'All rights reserved'
 description      'Installs/Configures mo_backup'
 long_description 'Installs/Configures mo_backup'
-version          '0.1.30'
+version          '0.1.31'
 
 depends 'rbenv',        '~>1.7.1'
