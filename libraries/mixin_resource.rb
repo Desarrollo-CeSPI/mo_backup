@@ -54,7 +54,7 @@ module MoBackup
       end
 
       def backup_command(model)
-        "/bin/bash -lc \"backup perform --trigger #{model}\""
+        "/bin/bash -lc \"backup perform -q --trigger #{model}\""
       end
 
     end
