@@ -35,7 +35,7 @@ end
 def delete_cron
     backup_periods.each do |period_name, period_options|
       name = "backup-#{new_resource.name}-#{period_name}"
-      cron_backup true, name, period_name, period_options
+      cron_backup false, name, period_name, period_options
     end
 end
 

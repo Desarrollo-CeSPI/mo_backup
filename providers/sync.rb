@@ -66,7 +66,7 @@ def cron_backup(create, name)
       weekday '*'
       user    new_resource.user
       command me.backup_command name
-      action  create ? :create : :delete
+      action  (create ? :create : :delete)
     end
   end
   if new_resource.every_hours
@@ -78,7 +78,7 @@ def cron_backup(create, name)
       weekday '*'
       user    new_resource.user
       command me.backup_command name
-      action  create ? :create : :delete
+      action  (create ? :create : :delete)
     end
   end
 end
