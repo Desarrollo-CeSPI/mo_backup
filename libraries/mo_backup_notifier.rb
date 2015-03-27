@@ -6,7 +6,7 @@ module MoBackup
         raise "Notifier type is not specified for #{notifier_name}" unless options['type']
         klass = options['type'].capitalize
         MoBackup::Notifier.const_get(klass).new(options).to_s
-      end.join '\n'
+      end.join "\n"
     end
 
     class Default < MoBackup::Component::Default

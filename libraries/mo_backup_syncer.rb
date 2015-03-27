@@ -6,7 +6,7 @@ module MoBackup
         raise "Syncer type is not specified for #{syncer_name}" unless options['type']
         klass = options['type'].capitalize
         MoBackup::Syncer.const_get(klass).new(options).to_s
-      end.join '\n'
+      end.join "\n"
     end
 
     class Default < MoBackup::Component::Default

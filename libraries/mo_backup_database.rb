@@ -5,7 +5,7 @@ module MoBackup
         raise "Database type is not specified for #{unique_name}" unless options['type']
         klass = options['type'].capitalize
         MoBackup::Database.const_get(klass).new(options.merge('unique_name' => unique_name)).to_s
-      end.join '\n'
+      end.join "\n"
     end
 
     class Default < MoBackup::Component::Default

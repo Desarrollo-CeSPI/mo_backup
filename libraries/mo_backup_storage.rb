@@ -7,7 +7,7 @@ module MoBackup
         klass = options['type'].capitalize
         options['keep'] ||= default_keep # Set default keep
         MoBackup::Storage.const_get(klass).new(options).to_s
-      end.join '\n'
+      end.join "\n"
     end
 
     class Default < MoBackup::Component::Default
