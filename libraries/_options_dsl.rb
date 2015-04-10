@@ -21,7 +21,7 @@ module MoBackup
       def sanitize_block_for(type)
         case type
         when :symbol
-          ->(value) { ":#{value}" }
+          ->(value) { ":'#{value}'" }
         when :string
           ->(value) { "'#{value}'" }
         else
