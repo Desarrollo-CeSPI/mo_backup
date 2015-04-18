@@ -13,6 +13,7 @@ Model.new(:'<%= @name %>','<%= @description %>') do
     <% @archives_exclude.each do |path| %>
     archive.exclude "<%= path %>"
     <% end %>
+    archive.tar_options '--warning=no-file-changed --warning=no-file-removed'
   end
   <% end %>
 
