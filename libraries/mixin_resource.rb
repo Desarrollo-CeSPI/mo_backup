@@ -54,7 +54,7 @@ module MoBackup
       end
 
       def backup_command(model)
-        "/bin/bash -lc \"backup perform -q --trigger #{model}\" >/dev/null 2>&1"
+        "/bin/bash -lc \"backup perform -q --trigger #{model}\" 2>&1 |  grep -v 'stdin: is not a tty'"
       end
 
     end
