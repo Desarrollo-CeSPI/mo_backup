@@ -70,6 +70,7 @@ store_with #{storage_id} do |server|
       option "port", :number, 22
       option "path", :string, "backups"
       option "keep", :number, 5
+      option "ssh_options", :hash
       storage_id "SFTP"
     end
 
