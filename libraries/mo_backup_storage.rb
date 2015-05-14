@@ -4,6 +4,7 @@ module MoBackup
     def self.generate_config(default_keep, storages_hash)
       Mash.new(storages_hash).map do |storage_name, options|
         raise "Storage type is not specified for #{storage_name}" unless options['type']
+        options = options.to_hash
         klass = options['type'].capitalize
         options['keep'] ||= default_keep # Set default keep
         MoBackup::Storage.const_get(klass).new(options).to_s
