@@ -66,6 +66,7 @@ def cron_backup(create, name)
       weekday '*'
       user    new_resource.user
       command me.backup_command name
+      shell   "/bin/bash"
       action  (create ? :create : :delete)
     end
   end
@@ -78,6 +79,7 @@ def cron_backup(create, name)
       weekday '*'
       user    new_resource.user
       command me.backup_command name
+      shell   "/bin/bash"
       action  (create ? :create : :delete)
     end
   end
