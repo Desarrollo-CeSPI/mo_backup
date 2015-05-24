@@ -35,13 +35,9 @@ module MoBackup
       end
 
       def remove
-        delete_backup_data
         delete_cron
       end
 
-      def delete_backup_data
-        backup_directory_manage false
-      end
 
       def backup_directory_manage(create = true)
         me = self

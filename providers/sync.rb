@@ -23,6 +23,10 @@ end
 
 action :remove do
   converge_by("Removes a sync model #{@new_resource}") do
+    name = "sync-#{new_resource.name}"
+    file ::File.join(backup_directory,"#{name}.rb") do
+      action :delete
+    end
     remove
   end
 end
