@@ -28,6 +28,12 @@ end
 
 action :remove do
   converge_by("Removes a backup model #{@new_resource}") do
+    backup_periods.each do |period_name, period_options|
+      name = "backup-#{new_resource.name}-#{period_name}"
+      file ::File.join(backup_directory,"#{name}.rb") do
+        action :delete
+      end
+    end
     remove
   end
 end
@@ -108,6 +114,7 @@ def cron_backup(create, name, period_name, options)
     weekday options['week_day']
     user    new_resource.user
     command me.backup_command name
+    shell   "/bin/bash"
     action  create ? :create : :delete
   end
 end

@@ -23,6 +23,10 @@ end
 
 action :remove do
   converge_by("Removes a sync model #{@new_resource}") do
+    name = "sync-#{new_resource.name}"
+    file ::File.join(backup_directory,"#{name}.rb") do
+      action :delete
+    end
     remove
   end
 end
@@ -66,6 +70,7 @@ def cron_backup(create, name)
       weekday '*'
       user    new_resource.user
       command me.backup_command name
+      shell   "/bin/bash"
       action  (create ? :create : :delete)
     end
   end
@@ -78,6 +83,7 @@ def cron_backup(create, name)
       weekday '*'
       user    new_resource.user
       command me.backup_command name
+      shell   "/bin/bash"
       action  (create ? :create : :delete)
     end
   end

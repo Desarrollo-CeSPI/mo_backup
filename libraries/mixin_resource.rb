@@ -35,13 +35,9 @@ module MoBackup
       end
 
       def remove
-        delete_backup_data
         delete_cron
       end
 
-      def delete_backup_data
-        backup_directory_manage false
-      end
 
       def backup_directory_manage(create = true)
         me = self
@@ -54,7 +50,7 @@ module MoBackup
       end
 
       def backup_command(model)
-        "/bin/bash -lc \"backup perform -q --no-logfile --syslog --trigger #{model}\" 2>&1 |  grep -v 'stdin: is not a tty'"
+        "sleep ${RANDOM:0:2} ; /bin/bash -lc \"backup perform -q --no-logfile --syslog --trigger #{model}\" 2>&1 |  grep -v 'stdin: is not a tty'"
       end
 
     end
