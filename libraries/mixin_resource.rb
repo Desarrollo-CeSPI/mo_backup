@@ -12,6 +12,17 @@ module MoBackup
     end
 
     module Provider
+      def save_backup(name)
+        backups = (node['mo_backup']['backups'] || []).to_a
+        backups << name
+        node.set['mo_backup']['backups'] = backups.uniq
+      end
+
+      def remove_backup(name)
+        backups = (node['mo_backup']['backups'] || []).to_a
+        backups.delete name
+        node.set['mo_backup']['backups'] = backups
+      end
 
       def backup_directory
         ::File.join ::Dir.home(new_resource.user), new_resource.backup_directory

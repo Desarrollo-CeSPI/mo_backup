@@ -18,6 +18,8 @@ action :create do
     create_model_template name
 
     cron_backup true, name
+
+    save_backup name
   end
 end
 
@@ -27,6 +29,7 @@ action :remove do
     file ::File.join(backup_directory,"#{name}.rb") do
       action :delete
     end
+    remove_backup name
     remove
   end
 end
@@ -54,7 +57,7 @@ def create_model_template(name)
     variables(:name => name,
               :description => new_resource.description,
               :syncers_config => ::MoBackup::Syncer.generate_config(syncer_options),
-              :notifiers_config => ::MoBackup::Notifier.generate_config(new_resource.notifiers),
+              :notifiers_config => ::MoBackup::Notifier.generate_config(new_resource.notifiers, {'resource_name' => name, 'node' => node.fqdn}),
               )
   end
 end

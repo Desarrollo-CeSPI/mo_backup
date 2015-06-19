@@ -17,9 +17,12 @@ action :create do
 
       name = "backup-#{new_resource.name}-#{period_name}"
 
+
       create_model_template name, period_options[:keep]
 
       cron_backup true, name, period_name, period_options
+
+      save_backup name
 
     end
 
@@ -33,6 +36,7 @@ action :remove do
       file ::File.join(backup_directory,"#{name}.rb") do
         action :delete
       end
+      remove_backup name
     end
     remove
   end
@@ -56,7 +60,7 @@ def create_model_template(name, default_keep)
               :description => new_resource.description,
               :storages_config  => ::MoBackup::Storage.generate_config(default_keep, new_resource.storages),
               :databases_config => ::MoBackup::Database.generate_config(new_resource.databases),
-              :notifiers_config => ::MoBackup::Notifier.generate_config(new_resource.notifiers),
+              :notifiers_config => ::MoBackup::Notifier.generate_config(new_resource.notifiers, {'resource_name' => name, 'node' => node.fqdn}),
               :archives => Array(new_resource.archives),
               :archives_exclude => Array(new_resource.exclude),
               :use_sudo => new_resource.use_sudo,
