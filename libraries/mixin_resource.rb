@@ -38,10 +38,15 @@ module MoBackup
         # Generate empty config.rb if it does not exist.
         file "backup config file #{new_resource.name}" do
           path lazy { ::File.join me.backup_directory,"..", "config.rb" }
-          content "# Backup v4.x Configuration"
+          content <<-CNF
+# Backup v4.x Configuration
+Utilities.configure do
+  send_nsca "#{node['mo_backup']['send_nsca']}"
+end
+          CNF
           owner new_resource.user
           mode '0755'
-          action :create_if_missing
+          action :create
         end
       end
 
