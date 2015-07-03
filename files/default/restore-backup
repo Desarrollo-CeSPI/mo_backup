@@ -272,6 +272,8 @@ restore() {
     mkdir -p $TARGET_DIRECTORY
   fi
   restore_remote_backup
+  echo "Remember to check restored files permissions because they can be modified"
+  echo "Running chef-client may solve any permissions problem"
 }
 
 

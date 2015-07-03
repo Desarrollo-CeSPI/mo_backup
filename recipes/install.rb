@@ -20,3 +20,8 @@ end
 rbenv_gem "backup" do
   ruby_version ruby_version
 end
+
+cookbook_file node['mo_backup']['restore_script'] do
+  mode "0700"
+  source 'restore-backup'
+end
