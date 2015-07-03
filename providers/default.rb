@@ -110,6 +110,9 @@ end
 
 def cron_backup(create, name, period_name, options)
   me = self
+
+  create = false if node['mo_backup']['backups_disabled']
+
   cron "backup #{name} #{period_name}" do
     minute  options['minute']
     hour    options['hour']
