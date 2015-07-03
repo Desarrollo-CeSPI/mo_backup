@@ -1,0 +1,270 @@
+#!/bin/bash
+
+TEMP=`getopt -o s:S:u:i:a:d:D:p:e:ht:Ab:U:y:M: --long dry-run -n $0 -- "$@"`
+
+help_message() {
+  echo
+  echo Restore from backups created using mo_backup cookbook. Usage:
+  echo
+  echo "$0 -s backup.server -S server [-u user] [-i key] [-d directory] \\"
+  echo "   [-p prefix] [-e daily|weekly|monthly] [-t YYYYMMDDHH ] \\"
+  echo "   [-U local_user] [-y synced_directory] [-D directory_to_restore] \\"
+  echo "   [-A] [-h] [-M db_id:local_db_name,db_id:local_db_name] -a application_id "
+  echo
+  echo "  -h show this help message"
+  echo "  -s specifies backup fqdn or ip" 
+  echo "  -d backup directory where backups are located"
+  echo "     Defaults to ~"
+  echo "  -y backup directory where synced backups are located"
+  echo "     Defaults to ~"
+  echo "  -D directory to restore backups"
+  echo "     Defaults to /tmp"
+  echo "  -p prefix for backup names. Defaults to backup"
+  echo "  -S specifies server DNS name that we need to restore backup"
+  echo "  -u specifies user to connect to backup server as"
+  echo "     Default user is backups"
+  echo "  -i ssh_key to be used to connect"
+  echo "     if ommited, use default"
+  echo "  -a application name to restore backup"
+  echo "  -e backup period to restore"
+  echo "     Defaults to daily. Can be weekly or monthly"
+  echo "  -t date and hour to restore backup: YYYYMMDD[HH]"
+  echo "     Hour can be ommited. Defaults to latest"
+  echo "  -A Do not restore archives. Default is to restore"
+  echo "  -U user to run database restore as. It is not a db user, but a system"
+  echo "     user that will have its configuration to connect autommatically setted"
+  echo "     For example by \$HOME/.my.cnf"
+  echo "     Defaults to current user"
+  echo "  -M Database mappings specified as a comma separated values, each of"
+  echo "     it being as db_id:local_db_name. Each mapping says where to restore a"
+  echo "     database id in the restore machine database"
+}
+
+execute(){
+  if [ "$DRYRUN" -eq 1 ] ; then
+    echo -e "DRY RUN: $@\n"
+  else
+    $@
+  fi
+}
+
+ssh_command() {
+  if [ "$#" -lt 1 ]; then
+    echo "ssh_command called without arguments"
+    exit 1
+  fi
+  if [ ! -z "$SSH_KEY" ]; then
+    KEY_OPTION="-i $SSH_KEY"
+  fi
+  execute ssh $KEY_OPTION $USER@$BACKUP_SERVER "$@"
+}
+
+scp_command() {
+  if [ "$#" -ne 2 ]; then
+    echo "scp_command called without source and destination"
+    exit 1
+  fi
+  if [ ! -z "$SSH_KEY" ]; then
+    KEY_OPTION="-i $SSH_KEY"
+  fi
+  execute scp -q $KEY_OPTION $USER@$BACKUP_SERVER:$1 $2
+  if [ $? -ne 0 ]; then
+    echo "Error trying to scp"
+    exit 1
+  fi
+}
+
+restore_archives(){
+  if [ "$RESTORE_ARCHIVES" -eq 1 ]; then
+    echo -n "Restoring backups archives... "
+    execute tar xfz "$TMP_DIR/$BACKUP_FILE_NAME/archives/$BACKUP_FILE_NAME.tar.gz -C $TARGET_DIRECTORY"
+    echo "Done!"
+  else
+    echo "Skip archive restore..."
+  fi
+}
+
+db_name_for_id(){
+  for map in `echo $DB_MAPPINGS | tr ',' ' '`; do
+    ID=`echo $map | cut -d: -f1`
+    if [ ! -z "$ID" -a "$ID" == "$DB_ID" ]; then
+      echo $map | cut -d: -f2
+      return
+    fi
+  done
+}
+
+load_mysql_dump(){
+  DB_NAME=$1
+  FILE=$2
+  if [ -z "$DB_NAME" -o ! -r "$FILE" ]; then
+    echo "Error trying to load mysql dump. Maybe DB Name can not be obtained from mapping for $DB_ID or dump can not be loaded"
+    exit 1
+  fi
+  MYSQL_CMD="mysql -f $DB_NAME"
+  if [ ! -z "$LOCAL_USER" ]; then
+    MYSQL_CMD="su $LOCAL_USER -c '$MYSQL_CMD'"
+  fi
+  eval $MYSQL_CMD < $FILE
+}
+
+restore_mysql_db(){
+  DB_CONN_DATA=`head -n 80 $1 | grep '^-- Host:' | head -1 | sed -r 's/^-- Host: (.*)( *)Database: (.*)$/\1|\3/g'`
+  DB_HOST=`echo $DB_CONN_DATA | cut -d'|' -f1 | sed 's/ +//g' | sed 's/^ +//'`
+  DB_NAME=`echo $DB_CONN_DATA | cut -d'|' -f2 | sed 's/ +//g' | sed 's/^ +//'`
+  DB_BIN_LOG=`head -n 80 $1 | grep '^-- CHANGE MASTER TO MASTER_LOG_FILE=' | head -1 | cut -d"'" -f 2`
+  if [ -z "$DB_NAME" -o -z "$DB_HOST" ]; then
+    echo "Error trying to find a DB Host or DB_NAME for `basename $1`"
+    echo "Dump must contain a line formatted as:"
+    echo
+    echo "-- Host: <MYSQL HOSTNAME>     Database: <database_name>"
+    help_message
+    exit 1
+  fi
+
+  DB_LOCAL_NAME=`db_name_for_id`
+
+  echo -n "  Restoring MySQL database $DB_ID into $DB_LOCAL_NAME... "
+  load_mysql_dump $DB_LOCAL_NAME $1
+  echo "Done!"
+
+  if [ ! -z "$DB_BIN_LOG" -a -z "$DATE" ]; then
+    echo "  Trying to retrieve incremental updates from binary logs from $DB_BIN_LOG: "
+    BIN_LOG_DIR=`ssh_command find $SYNC_DIRECTORY/mysql-binary-logs-$DB_HOST -type f -name $DB_BIN_LOG | head -1`
+    BIN_LOG_DIR=`dirname $BIN_LOG_DIR`
+    BIN_LOG_SEP="."
+    FROM_BIN_LOG=`echo $DB_BIN_LOG | cut -d$BIN_LOG_SEP -f 2`
+    BIN_LOGS=`ssh_command find $BIN_LOG_DIR -type f -printf \'%f\\\\n\' | sort | awk -v FS=. -v low=$FROM_BIN_LOG 'BEGIN {low=low+0} $2+0 >= low' | tr '\n' ' '`
+    BIN_LOG_DUMP=`tempfile -d $TMP_DIR -p sqlbk`
+    echo "    $BIN_LOGS"
+    ssh_command "cd $BIN_LOG_DIR && mysqlbinlog --base64-output=NEVER -d $DB_NAME $BIN_LOGS | grep -v '^SET @@session.pseudo_thread_id='" > $BIN_LOG_DUMP
+
+    echo -n "  Start restore incremental updates..."
+    load_mysql_dump $DB_LOCAL_NAME $BIN_LOG_DUMP
+    echo "Done!"
+
+    rm $BIN_LOG_DUMP
+  fi
+}
+
+restore_databases(){
+  DB_DIR="$TMP_DIR/$BACKUP_FILE_NAME/databases/"
+  if [ -d "$DB_DIR" ]; then
+    echo "Restoring databases:"
+    for file in $DB_DIR/*gz; do
+      gunzip -f $file
+      file=$DB_DIR/`basename $file .gz`
+      DB=`basename $file | cut -d'-' -f1 | tr 'A-Z' 'a-z'`
+      DB_ID=`basename $file | cut -d '-' -f2 | cut -d '.' -f1`
+      if [ -z "$DB_ID" ]; then
+        echo "Error trying to restore database. ID not identified for `basename $file`"
+        exit 1
+      fi
+      restore_${DB}_db $file
+    done
+  else
+    echo "Application does not use DB or restore is runin dry-run mode" 
+  fi
+}
+
+# Connect to remote server trying to find specified dated backup or latest
+# Remote backup name is inferred from:
+#   * Remote base directory
+#   * Backup server to retrieve backups from prefixed with a string
+#   * Application's name|id 
+#   * Period to retrieve
+#   * If a date is specified, we try to find this backup, or retrieve latest
+# When the backup to retrieve is located, download to local machine and start 
+# restore process
+restore_remote_backup() {
+  BACKUP_FILE_NAME="$PREFIX-$SERVER-$APPLICATION-$PERIOD"
+  BACKUP_BASE_DIRECTORY="$DIRECTORY/$BACKUP_FILE_NAME"
+  DRUN=$DRYRUN
+  DRYRUN=0
+  if [ -z "$DATE" ]; then
+    DATE_DIR=`ssh_command ls $BACKUP_BASE_DIRECTORY \| sort -r \| head -1`
+  else
+    D=`echo $DATE | sed -r 's/^(.{4})(.{2})(.{2})(.{0,2})$/\1.\2.\3\.\4/'`
+    if [ -z "$D" ]; then
+      echo "Error parsing $DATE as YYYYMMDDHH"
+      exit 1
+    fi
+    DATE_DIR=`ssh_command ls $BACKUP_BASE_DIRECTORY \| grep $D \| sort -r \| head -1`
+  fi
+  DRYRUN=$DRUN
+  echo -n "Start copying files from remote server... "
+  scp_command "$BACKUP_BASE_DIRECTORY/$DATE_DIR/$BACKUP_FILE_NAME.tar" $TMP_DIR
+  echo "Done!"
+  execute tar xf "$TMP_DIR/$BACKUP_FILE_NAME.tar" -C $TMP_DIR
+  execute rm "$TMP_DIR/$BACKUP_FILE_NAME.tar"
+  restore_archives
+  restore_databases
+  execute rm -fr "$TMP_DIR/$BACKUP_FILE_NAME"
+}
+
+# Main restore function
+# Validates required arguments or exit with failure
+restore() {
+  if [ -z "$BACKUP_SERVER" ] || [ -z "$SERVER" ] || [ -z "$APPLICATION" ]; then
+    echo Required parameter missing
+    help_message
+    exit 1
+  fi
+  if [ "$PERIOD" != "daily" -a "$PERIOD" != "weekly" -a "$PERIOD" != "monthly" ]; then
+    echo "Period setted to $PERIOD, but must be one of daily|weekly|monthly"
+    help_message
+    exit 1
+  fi
+  if [ ! -d "$TARGET_DIRECTORY" ]; then
+    echo "Tatget directory $DIRECTORY is not a directory"
+    help_message
+    exit 1
+  fi
+  restore_remote_backup
+}
+
+if [ $? != 0 ] ; then help_message >&2 ; exit 1 ; fi
+
+eval set -- "$TEMP"
+
+# Remote user to connect by ssh to retrieve backups
+USER=backups
+# Prefix for backup names
+PREFIX=backup
+# Remote base directory where backups are stored
+DIRECTORY="."
+# Remote base directory where synced files are stored
+SYNC_DIRECTORY="."
+# Backup period to restore: daily|weekly|monthly
+PERIOD=daily
+# Temporary directory to use
+TMP_DIR=/tmp
+# Where to restore backup files
+TARGET_DIRECTORY=/tmp
+# Restore archive backups or not?
+RESTORE_ARCHIVES=1
+# Run in dry run mode? (really restore backup or show what we are going to do)
+DRYRUN=0
+while true ; do
+  case "$1" in
+    -s) BACKUP_SERVER=$2; shift 2;;
+    -S) SERVER=$2; shift 2;;
+    -u) USER=$2; shift 2;;
+    -i) SSH_KEY=$2; shift 2;;
+    -a) APPLICATION=$2; shift 2;;
+    -d) DIRECTORY=$2; shift 2;;
+    -y) SYNC_DIRECTORY=$2; shift 2;;
+    -p) PREFIX=$2; shift 2;;
+    -e) PERIOD=$2; shift 2;;
+    -t) DATE=$2; shift 2;;
+    -D) TARGET_DIRECTORY=$2; shift 2;;
+    -A) RESTORE_ARCHIVES=0; shift 1;;
+    -U) LOCAL_USER=$2; shift 2;;
+    -M) DB_MAPPINGS=$2; shift 2;;
+    --dry-run) DRYRUN=1; shift 1;;
+    --) shift ; break ;;
+    h|*) help_message ; exit 1 ;;
+  esac
+done
+
+restore
