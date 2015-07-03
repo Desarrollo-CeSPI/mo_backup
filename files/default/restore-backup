@@ -1,6 +1,8 @@
 #!/bin/bash
 
-TEMP=`getopt -o s:S:u:i:a:d:D:p:e:ht:Ab:U:y:M: --long dry-run -n $0 -- "$@"`
+TEMP=`getopt -o s:S:u:i:a:d:D:p:e:ht:AYFb:U:y:M: --long dry-run -n $0 -- "$@"`
+
+RET_CMD=$?
 
 help_message() {
   echo
@@ -9,7 +11,8 @@ help_message() {
   echo "$0 -s backup.server -S server [-u user] [-i key] [-d directory] \\"
   echo "   [-p prefix] [-e daily|weekly|monthly] [-t YYYYMMDDHH ] \\"
   echo "   [-U local_user] [-y synced_directory] [-D directory_to_restore] \\"
-  echo "   [-A] [-h] [-M db_id:local_db_name,db_id:local_db_name] -a application_id "
+  echo "   [-A] [-Y] [-h] [-M db_id:local_db_name,db_id:local_db_name] \\"
+  echo "   -a application_id "
   echo
   echo "  -h show this help message"
   echo "  -s specifies backup fqdn or ip" 
@@ -18,7 +21,7 @@ help_message() {
   echo "  -y backup directory where synced backups are located"
   echo "     Defaults to ~"
   echo "  -D directory to restore backups"
-  echo "     Defaults to /tmp"
+  echo "     Defaults to /tmp/restore"
   echo "  -p prefix for backup names. Defaults to backup"
   echo "  -S specifies server DNS name that we need to restore backup"
   echo "  -u specifies user to connect to backup server as"
@@ -31,6 +34,8 @@ help_message() {
   echo "  -t date and hour to restore backup: YYYYMMDD[HH]"
   echo "     Hour can be ommited. Defaults to latest"
   echo "  -A Do not restore archives. Default is to restore"
+  echo "  -Y Do not restore synced archives. Default is to restore"
+  echo "  -F Force to delete when syncing files. Default is to not delete anything"
   echo "  -U user to run database restore as. It is not a db user, but a system"
   echo "     user that will have its configuration to connect autommatically setted"
   echo "     For example by \$HOME/.my.cnf"
@@ -39,6 +44,7 @@ help_message() {
   echo "     it being as db_id:local_db_name. Each mapping says where to restore a"
   echo "     database id in the restore machine database"
 }
+
 
 execute(){
   if [ "$DRYRUN" -eq 1 ] ; then
@@ -56,7 +62,7 @@ ssh_command() {
   if [ ! -z "$SSH_KEY" ]; then
     KEY_OPTION="-i $SSH_KEY"
   fi
-  execute ssh $KEY_OPTION $USER@$BACKUP_SERVER "$@"
+  execute ssh $SSH_OPTIONS $KEY_OPTION $USER@$BACKUP_SERVER "$@"
 }
 
 scp_command() {
@@ -67,11 +73,34 @@ scp_command() {
   if [ ! -z "$SSH_KEY" ]; then
     KEY_OPTION="-i $SSH_KEY"
   fi
-  execute scp -q $KEY_OPTION $USER@$BACKUP_SERVER:$1 $2
+  execute scp $SSH_OPTIONS -q $KEY_OPTION $USER@$BACKUP_SERVER:$1 $2
   if [ $? -ne 0 ]; then
     echo "Error trying to scp"
     exit 1
   fi
+}
+
+rsync_command() {
+  if [ "$#" -ne 2 ]; then
+    echo "rsync_command called without source and destination"
+    exit 1
+  fi
+  if [ ! -z "$SSH_KEY" ]; then
+    KEY_OPTION="-i $SSH_KEY"
+  fi
+  RSYNC_OPTIONS="-az"
+  if [ "$SYNC_DELETE" -eq 1 ]; then
+    RSYNC_OPTIONS="$RSYNC_OPTIONS --delete"
+  fi
+  if [ "$DRYRUN" -eq 1 ] ; then
+    RSYNC_OPTIONS="$RSYNC_OPTIONS -n"
+  fi
+  rsync -e "ssh $SSH_OPTIONS $KEY_OPTION" $RSYNC_OPTIONS $USER@$BACKUP_SERVER:$1 $2
+  if [ $? -ne 0 ]; then
+    echo "Error trying to rsync"
+    exit 1
+  fi
+
 }
 
 restore_archives(){
@@ -81,6 +110,22 @@ restore_archives(){
     echo "Done!"
   else
     echo "Skip archive restore..."
+  fi
+}
+
+restore_synced_files(){
+  if [ "$RESTORE_SYNCED" -eq 1 ]; then
+    echo -n "Restoring backups of synced files... "
+      SYNC_BASE_DIRECTORY="$SYNC_DIRECTORY/$SERVER-$APPLICATION"
+      ssh_command test -d $SYNC_BASE_DIRECTORY
+      if [ $? -eq 0 ]; then
+        rsync_command $SYNC_BASE_DIRECTORY/ $TARGET_DIRECTORY
+        echo "Done!"
+      else
+        echo "No synced archives"
+      fi
+  else
+    echo "Skip sync restore..."
   fi
 }
 
@@ -105,7 +150,11 @@ load_mysql_dump(){
   if [ ! -z "$LOCAL_USER" ]; then
     MYSQL_CMD="su $LOCAL_USER -c '$MYSQL_CMD'"
   fi
-  eval $MYSQL_CMD < $FILE
+  if [ "$DRYRUN" -eq 1 ]; then
+    echo $MYSQL_CMD "< $FILE"
+  else
+    eval $MYSQL_CMD < $FILE
+  fi
 }
 
 restore_mysql_db(){
@@ -129,6 +178,8 @@ restore_mysql_db(){
   echo "Done!"
 
   if [ ! -z "$DB_BIN_LOG" -a -z "$DATE" ]; then
+    DRUN=$DRYRUN
+    DRYRUN=0
     echo "  Trying to retrieve incremental updates from binary logs from $DB_BIN_LOG: "
     BIN_LOG_DIR=`ssh_command find $SYNC_DIRECTORY/mysql-binary-logs-$DB_HOST -type f -name $DB_BIN_LOG | head -1`
     BIN_LOG_DIR=`dirname $BIN_LOG_DIR`
@@ -142,8 +193,8 @@ restore_mysql_db(){
     echo -n "  Start restore incremental updates..."
     load_mysql_dump $DB_LOCAL_NAME $BIN_LOG_DUMP
     echo "Done!"
-
     rm $BIN_LOG_DUMP
+    DRYRUN=$DRUN
   fi
 }
 
@@ -151,7 +202,7 @@ restore_databases(){
   DB_DIR="$TMP_DIR/$BACKUP_FILE_NAME/databases/"
   if [ -d "$DB_DIR" ]; then
     echo "Restoring databases:"
-    for file in $DB_DIR/*gz; do
+    for file in `ls $DB_DIR/*gz 2> /dev/null`; do
       gunzip -f $file
       file=$DB_DIR/`basename $file .gz`
       DB=`basename $file | cut -d'-' -f1 | tr 'A-Z' 'a-z'`
@@ -197,6 +248,7 @@ restore_remote_backup() {
   echo "Done!"
   execute tar xf "$TMP_DIR/$BACKUP_FILE_NAME.tar" -C $TMP_DIR
   execute rm "$TMP_DIR/$BACKUP_FILE_NAME.tar"
+  restore_synced_files
   restore_archives
   restore_databases
   execute rm -fr "$TMP_DIR/$BACKUP_FILE_NAME"
@@ -216,14 +268,16 @@ restore() {
     exit 1
   fi
   if [ ! -d "$TARGET_DIRECTORY" ]; then
-    echo "Tatget directory $DIRECTORY is not a directory"
-    help_message
-    exit 1
+    echo "Target directory $TARGET_DIRECTORY is not a directory. Proceed to creat it"
+    mkdir -p $TARGET_DIRECTORY
   fi
   restore_remote_backup
 }
 
-if [ $? != 0 ] ; then help_message >&2 ; exit 1 ; fi
+
+if [ $RET_CMD -ne 0 ] ; then 
+  help_message >&2 ; exit 1; 
+fi
 
 eval set -- "$TEMP"
 
@@ -240,11 +294,18 @@ PERIOD=daily
 # Temporary directory to use
 TMP_DIR=/tmp
 # Where to restore backup files
-TARGET_DIRECTORY=/tmp
+TARGET_DIRECTORY=/tmp/restore
 # Restore archive backups or not?
 RESTORE_ARCHIVES=1
+# Restore synched files if any?
+RESTORE_SYNCED=1
+# Do delete local files if are not present in remote backup server?
+SYNC_DELETE=0
 # Run in dry run mode? (really restore backup or show what we are going to do)
 DRYRUN=0
+
+# Used common ssh options
+SSH_OPTIONS='-o StrictHostKeyChecking=no'
 while true ; do
   case "$1" in
     -s) BACKUP_SERVER=$2; shift 2;;
@@ -259,6 +320,8 @@ while true ; do
     -t) DATE=$2; shift 2;;
     -D) TARGET_DIRECTORY=$2; shift 2;;
     -A) RESTORE_ARCHIVES=0; shift 1;;
+    -Y) RESTORE_SYNCED=0; shift 1;;
+    -F) SYNC_DELETE=1; shift 1;;
     -U) LOCAL_USER=$2; shift 2;;
     -M) DB_MAPPINGS=$2; shift 2;;
     --dry-run) DRYRUN=1; shift 1;;
