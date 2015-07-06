@@ -271,9 +271,15 @@ restore() {
     echo "Target directory $TARGET_DIRECTORY is not a directory. Proceed to creat it"
     mkdir -p $TARGET_DIRECTORY
   fi
+  echo -en "\e[1m"
+  echo "Begin restore of $APPLICATION"
+  echo -en "\e[21m"
   restore_remote_backup
+  echo -en  "\e[1m\e[92m"
   echo "Remember to check restored files permissions because they can be modified"
   echo "Running chef-client may solve any permissions problem"
+  echo -en "\e[21m\e[39m"
+  echo
 }
 
 
