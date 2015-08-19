@@ -188,7 +188,7 @@ restore_mysql_db(){
     BIN_LOGS=`ssh_command find $BIN_LOG_DIR -type f -printf \'%f\\\\n\' | sort | awk -v FS=. -v low=$FROM_BIN_LOG 'BEGIN {low=low+0} $2+0 >= low' | tr '\n' ' '`
     BIN_LOG_DUMP=`tempfile -d $TMP_DIR -p sqlbk`
     echo "    $BIN_LOGS"
-    ssh_command "cd $BIN_LOG_DIR && mysqlbinlog --base64-output=NEVER -d $DB_NAME $BIN_LOGS | grep -v '^SET @@session.pseudo_thread_id='" > $BIN_LOG_DUMP
+    ssh_command "cd $BIN_LOG_DIR && mysqlbinlog --base64-output=NEVER -d $DB_NAME $BIN_LOGS | grep -iv 'drop database' | 'grep -v '^SET @@session.pseudo_thread_id='" > $BIN_LOG_DUMP
 
     echo -n "  Start restore incremental updates..."
     load_mysql_dump $DB_LOCAL_NAME $BIN_LOG_DUMP
