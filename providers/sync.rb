@@ -67,6 +67,7 @@ def cron_backup(create, name)
 
   create = false if node['mo_backup']['backups_disabled']
 
+
   if new_resource.every_minutes
     cron "sync #{new_resource.name} every #{new_resource.every_minutes} minutes" do
       minute  "*/#{new_resource.every_minutes}"
